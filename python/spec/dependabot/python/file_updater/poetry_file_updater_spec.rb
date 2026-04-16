@@ -9,7 +9,9 @@ require "dependabot/dependency_file"
 require "dependabot/python/file_updater/poetry_file_updater"
 require "dependabot/shared_helpers"
 
-RSpec.describe Dependabot::Python::FileUpdater::PoetryFileUpdater do
+# Integration tests that execute real Poetry commands (slower, require external dependencies)
+# For fast unit tests without external dependencies, see poetry_file_updater_unit_spec.rb
+RSpec.describe Dependabot::Python::FileUpdater::PoetryFileUpdater, :integration do
   let(:updater) do
     described_class.new(
       dependency_files: dependency_files,
