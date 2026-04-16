@@ -16,7 +16,7 @@ module Dependabot
         File.read(path)
       end
 
-      sig { override.params(path: String, content: String).void }
+      sig { override.params(path: String, content: String).returns(Integer) }
       def write(path, content)
         File.write(path, content)
       end

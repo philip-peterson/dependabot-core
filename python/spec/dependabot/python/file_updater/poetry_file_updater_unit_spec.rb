@@ -196,7 +196,8 @@ RSpec.describe Dependabot::Python::FileUpdater::PoetryFileUpdater, :unit do
       updater.send(:write_temporary_dependency_files, pyproject_content)
 
       # Files are in memory, not on disk
-      expect(file_system.files.keys).to include("pyproject.toml", "poetry.lock")
+      # Note: InMemoryFileSystem normalizes paths to absolute (with leading /)
+      expect(file_system.files.keys).to include("/pyproject.toml", "/poetry.lock")
       expect(Dir.glob("/tmp/dependabot_*")).to be_empty
     end
   end
@@ -225,11 +226,12 @@ RSpec.describe Dependabot::Python::FileUpdater::PoetryFileUpdater, :unit do
 
   describe "performance" do
     it "runs in milliseconds, not seconds" do
-      shell_executor.stub_success(/poetry/, stdout: "OK")
-
       start_time = Time.now
 
       10.times do
+        # Re-stub after clear!
+        shell_executor.stub_success(/poetry/, stdout: "OK")
+
         updater.send(:write_temporary_dependency_files, pyproject.content)
         updater.send(:run_poetry_command, "poetry --version")
         file_system.clear!

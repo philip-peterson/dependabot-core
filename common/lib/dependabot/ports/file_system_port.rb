@@ -18,7 +18,8 @@ module Dependabot
       def read(path); end
 
       # Write content to a file
-      sig { abstract.params(path: String, content: String).void }
+      # Returns the number of bytes written (matching File.write behavior)
+      sig { abstract.params(path: String, content: String).returns(Integer) }
       def write(path, content); end
 
       # Check if a file or directory exists

@@ -27,7 +27,7 @@ module Dependabot
           T.must(@files[normalized])
         end
 
-        sig { override.params(path: String, content: String).void }
+        sig { override.params(path: String, content: String).returns(Integer) }
         def write(path, content)
           normalized = normalize_path(path)
 
@@ -36,6 +36,7 @@ module Dependabot
           mkdir_p(parent) unless parent == "." || parent == "/"
 
           @files[normalized] = content
+          content.bytesize
         end
 
         sig { override.params(path: String).returns(T::Boolean) }
