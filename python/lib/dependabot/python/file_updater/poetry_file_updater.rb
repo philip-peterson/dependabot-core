@@ -36,10 +36,12 @@ module Dependabot
           params(
             dependencies: T::Array[Dependabot::Dependency],
             dependency_files: T::Array[Dependabot::DependencyFile],
-            credentials: T::Array[Dependabot::Credential]
+            credentials: T::Array[Dependabot::Credential],
+            file_system: T.nilable(Dependabot::Ports::FileSystemPort),
+            shell_executor: T.nilable(Dependabot::Ports::ShellExecutorPort)
           ).void
         end
-        def initialize(dependencies:, dependency_files:, credentials:)
+        def initialize(dependencies:, dependency_files:, credentials:, file_system: nil, shell_executor: nil)
           @dependencies = dependencies
           @dependency_files = dependency_files
           @credentials = credentials
@@ -53,6 +55,20 @@ module Dependabot
           @updated_pyproject_content = T.let(nil, T.nilable(String))
           @poetry_plugin_installer = T.let(nil, T.nilable(PoetryPluginInstaller))
           @poetry_lock = T.let(nil, T.nilable(Dependabot::DependencyFile))
+
+          # Dependency injection for testability:
+          # - Production: defaults to real file system and shell execution
+          # - Tests: can inject in-memory file system and stubbed shell executor
+          # This enables fast unit tests (milliseconds) without external dependencies
+          require_relative "../../service_container" unless defined?(Dependabot::ServiceContainer)
+          @file_system = T.let(
+            file_system || Dependabot::ServiceContainer.instance.resolve(:file_system),
+            Dependabot::Ports::FileSystemPort
+          )
+          @shell_executor = T.let(
+            shell_executor || Dependabot::ServiceContainer.instance.resolve(:shell_executor),
+            Dependabot::Ports::ShellExecutorPort
+          )
         end
 
         sig { returns(T::Array[Dependabot::DependencyFile]) }
@@ -317,24 +333,38 @@ module Dependabot
           )
         end
 
+        # Use injected shell executor instead of SharedHelpers for testability
+        # @shell_executor returns structured ExecutionResult (testable without real commands)
+        # We convert it back to exception-based API for backward compatibility
         sig { params(command: String, fingerprint: T.nilable(String)).returns(String) }
         def run_poetry_command(command, fingerprint: nil)
-          SharedHelpers.run_shell_command(command, fingerprint: fingerprint)
+          result = @shell_executor.execute(command)
+
+          unless result.success
+            raise SharedHelpers::HelperSubprocessFailed.new(
+              message: result.stderr,
+              error_context: { command: fingerprint || command }
+            )
+          end
+
+          result.stdout
         end
 
+        # Use injected file system instead of File/FileUtils for testability
+        # In tests, @file_system is InMemoryFileSystem (no disk I/O)
         sig { params(pyproject_content: Object).returns(Integer) }
         def write_temporary_dependency_files(pyproject_content)
           dependency_files.each do |file|
             path = file.name
-            FileUtils.mkdir_p(Pathname.new(path).dirname)
-            File.write(path, file.content)
+            @file_system.mkdir_p(Pathname.new(path).dirname.to_s)
+            @file_system.write(path, file.content)
           end
 
           # Overwrite the .python-version with updated content
-          File.write(".python-version", language_version_manager.python_major_minor)
+          @file_system.write(".python-version", language_version_manager.python_major_minor)
 
           # Overwrite the pyproject with updated content
-          File.write("pyproject.toml", pyproject_content)
+          @file_system.write("pyproject.toml", pyproject_content.to_s)
         end
 
         sig { void }

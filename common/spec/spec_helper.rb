@@ -67,6 +67,26 @@ RSpec.configure do |config|
     Dependabot::Experiments.reset!
   end
 
+  # Configure test adapters for unit tests
+  # Tests tagged with :unit will use in-memory adapters for fast, isolated testing
+  config.before(:each, :unit) do
+    require_relative "../lib/dependabot/service_container"
+    require_relative "../lib/dependabot/adapters/test/in_memory_file_system"
+    require_relative "../lib/dependabot/adapters/test/stub_shell_executor"
+    require_relative "../lib/dependabot/adapters/test/stub_http_client"
+
+    container = Dependabot::ServiceContainer.new
+    container.register(:file_system, Dependabot::Adapters::Test::InMemoryFileSystem.new)
+    container.register(:shell_executor, Dependabot::Adapters::Test::StubShellExecutor.new)
+    container.register(:http_client, Dependabot::Adapters::Test::StubHttpClient.new)
+    Dependabot::ServiceContainer.instance = container
+  end
+
+  config.after(:each, :unit) do
+    # Reset to default (real) implementations after unit tests
+    Dependabot::ServiceContainer.reset!
+  end
+
   config.around do |example|
     if example.metadata[:profile]
       example_name = example.metadata[:full_description].strip.gsub(/[\s#\.-]/, "_").gsub("::", "_").downcase
